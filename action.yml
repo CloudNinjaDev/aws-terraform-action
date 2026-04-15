@@ -105,6 +105,12 @@ inputs:
     required: false
     default: ''
 
+  # ── Caching ───────────────────────────────────────────────────────────────────
+  cache_plugins:
+    description: 'Cache Terraform providers and TFLint plugins to speed up subsequent runs.'
+    required: false
+    default: 'true'
+
   # ── PR integration ────────────────────────────────────────────────────────────
   comment_on_pr:
     description: 'Post a summary comment on the pull request when triggered by a PR event.'
@@ -167,7 +173,22 @@ runs:
       run: terraform fmt -check -recursive
       continue-on-error: false
 
-    # ── 4. Terraform init ────────────────────────────────────────────────────────
+    # ── 4. Terraform provider cache ──────────────────────────────────────────────
+    - name: Create Terraform Plugin Cache Dir
+      if: inputs.cache_plugins == 'true'
+      shell: bash
+      run: mkdir -p ~/.terraform.d/plugin-cache
+
+    - name: Cache Terraform Providers
+      if: inputs.cache_plugins == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.terraform.d/plugin-cache
+        key: ${{ runner.os }}-tf-providers-${{ hashFiles('**/.terraform.lock.hcl') }}
+        restore-keys: |
+          ${{ runner.os }}-tf-providers-
+
+    # ── 5. Terraform init ────────────────────────────────────────────────────────
     - name: Terraform Init
       id: init
       if: >-
@@ -176,6 +197,8 @@ runs:
         inputs.run_apply   == 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        TF_PLUGIN_CACHE_DIR: ${{ inputs.cache_plugins == 'true' && '~/.terraform.d/plugin-cache' || '' }}
       run: |
         INIT_ARGS=()
         if [[ -n "${{ inputs.backend_config }}" ]]; then
@@ -186,7 +209,7 @@ runs:
         fi
         terraform init "${INIT_ARGS[@]}"
 
-    # ── 5. Terraform validate ────────────────────────────────────────────────────
+    # ── 6. Terraform validate ────────────────────────────────────────────────────
     - name: Terraform Validate
       id: validate
       if: inputs.run_validate == 'true'
@@ -194,12 +217,21 @@ runs:
       working-directory: ${{ inputs.working_directory }}
       run: terraform validate -no-color
 
-    # ── 6. TFLint ────────────────────────────────────────────────────────────────
+    # ── 7. TFLint ────────────────────────────────────────────────────────────────
     - name: Setup TFLint
       if: inputs.run_lint == 'true'
       uses: terraform-linters/setup-tflint@v4
       with:
         tflint_version: ${{ inputs.tflint_version }}
+
+    - name: Cache TFLint Plugins
+      if: inputs.run_lint == 'true' && inputs.cache_plugins == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.tflint.d/plugins
+        key: ${{ runner.os }}-tflint-${{ hashFiles('**/.tflint.hcl') }}
+        restore-keys: |
+          ${{ runner.os }}-tflint-
 
     - name: TFLint Init
       id: lint_init
@@ -215,7 +247,7 @@ runs:
       working-directory: ${{ inputs.working_directory }}
       run: tflint --format compact --recursive
 
-    # ── 7. terraform-docs ────────────────────────────────────────────────────────
+    # ── 8. terraform-docs ────────────────────────────────────────────────────────
     - name: Setup terraform-docs
       if: inputs.run_docs == 'true'
       uses: terraform-docs/gh-actions@v1
@@ -225,7 +257,7 @@ runs:
         output-method: inject
         git-push: ${{ inputs.docs_push }}
 
-    # ── 8. Checkov security scan ─────────────────────────────────────────────────
+    # ── 9. Checkov security scan ─────────────────────────────────────────────────
     - name: Checkov Security Scan
       id: checkov
       if: inputs.run_security_scan == 'true'
@@ -236,7 +268,7 @@ runs:
         quiet: true
         output_format: cli
 
-    # ── 9. Terraform plan ────────────────────────────────────────────────────────
+    # ── 10. Terraform plan ───────────────────────────────────────────────────────
     - name: Terraform Plan
       id: plan
       if: inputs.run_plan == 'true'
@@ -269,7 +301,7 @@ runs:
           } >> "$GITHUB_OUTPUT"
         fi
 
-    # ── 10. Post PR comment ──────────────────────────────────────────────────────
+    # ── 11. Post PR comment ──────────────────────────────────────────────────────
     - name: Post PR Comment
       if: >-
         inputs.comment_on_pr == 'true' &&
@@ -331,7 +363,7 @@ runs:
             });
           }
 
-    # ── 11. Terraform apply ──────────────────────────────────────────────────────
+    # ── 12. Terraform apply ──────────────────────────────────────────────────────
     - name: Terraform Apply
       id: apply
       if: inputs.run_apply == 'true'
