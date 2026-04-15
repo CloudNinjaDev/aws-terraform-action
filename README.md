@@ -194,7 +194,7 @@ jobs:
 | `var_file` | Path to tfvars file | `""` |
 | `extra_args` | Extra arguments for plan/apply | `""` |
 | `comment_on_pr` | Post summary comment on PR | `true` |
-| `github_token` | GitHub token for PR comments | `""` (pass `${{ github.token }}`) |
+| `github_token` | GitHub token for PR comments | `""` (pass `secrets.GITHUB_TOKEN`) |
 
 ## Outputs
 

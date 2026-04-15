@@ -111,7 +111,7 @@ inputs:
     required: false
     default: 'true'
   github_token:
-    description: 'GitHub token used to post PR comments. Pass ${{ secrets.GITHUB_TOKEN }} or ${{ github.token }}.'
+    description: 'GitHub token used to post PR comments. Pass secrets.GITHUB_TOKEN or github.token from your workflow.'
     required: false
     default: ''
 
